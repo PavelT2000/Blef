@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Блеф — Текстовый Интерфейс</title>
+    <style>
+        body { font-family: monospace; background: #121212; color: #00ff00; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .block { border: 1px solid #00ff00; padding: 15px; margin-bottom: 20px; border-radius: 5px; }
+        h3 { margin-top: 0; color: #ffff00; }
+        ul { list-style-type: none; padding-left: 0; }
+        li { margin-bottom: 5px; }
+        .current-turn { color: #ff00ff; font-weight: bold; }
+        .eliminated { color: #555; text-decoration: line-through; }
+
+        /* Стили для формы ходов */
+        .action-panel { background: #1a1a1a; padding: 15px; border: 2px dashed #ff00ff; border-radius: 5px; margin-top: 20px; }
+        select, button { background: #222; color: #00ff00; border: 1px solid #00ff00; padding: 8px; margin: 5px 0; font-family: monospace; font-size: 14px; width: 100%; box-sizing: border-box; }
+        button:hover { background: #00ff00; color: #000; cursor: pointer; }
+        button.btn-challenge { border-color: #ff0000; color: #ff0000; }
+        button.btn-challenge:hover { background: #ff0000; color: #000; }
+        .form-group { margin-bottom: 10px; }
+        label { display: block; color: #aaa; font-size: 12px; margin-bottom: 2px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Игра "Блеф" — Вы вошли как: <span style="color: #fff;">{{ player_id }}</span></h1>
+
+        <div class="block">
+            <h3>Статус Комнаты: <span id="game-status">Загрузка...</span></h3>
+            <p>Сейчас ход: <span id="current-player">...</span></p>
+        </div>
+
+        <div id="turn-panel" class="action-panel" style="display: none;">
+            <h3 style="color: #ff00ff; margin-bottom: 10px;">➔ ВАШ ХОД! Сделайте заявление:</h3>
+
+            <div class="form-group">
+                <label>Тип комбинации:</label>
+                <select id="bid-type" onchange="toggleFormFields()">
+                    <option value="1">Старшая карта</option>
+                    <option value="2">Пара</option>
+                    <option value="3">Две пары</option>
+                    <option value="4">Сет (Тройка)</option>
+                    <option value="5">Стрит</option>
+                    <option value="6">Фулл Хаус</option>
+                    <option value="7">Флеш</option>
+                    <option value="8">Каре</option>
+                    <option value="9">Стрит-Флеш</option>
+                    <option value="10">Флеш-Рояль</option>
+                </select>
+            </div>
+
+            <div class="form-group" id="primary-rank-group">
+                <label id="primary-label">Достоинство карты / Нижняя граница:</label>
+                <select id="bid-primary-rank">
+                    <option value="14">Туз (Т)</option>
+                    <option value="13">Король (К)</option>
+                    <option value="12">Дама (Д)</option>
+                    <option value="11">Валет (В)</option>
+                    <option value="10">10</option>
+                    <option value="9">9</option>
+                    <option value="8">8</option>
+                    <option value="7">7</option>
+                    <option value="6">6</option>
+                    <option value="5">5</option>
+                    <option value="4">4</option>
+                    <option value="3">3</option>
+                    <option value="2">2</option>
+                </select>
+            </div>
+
+            <div class="form-group" id="secondary-rank-group" style="display: none;">
+                <label>Второе достоинство (для 2 пар или Фулла):</label>
+                <select id="bid-secondary-rank">
+                    <option value="13">Король (К)</option>
+                    <option value="14">Туз (Т)</option>
+                    <option value="12">Дама (Д)</option>
+                    <option value="11">Валет (В)</option>
+                    <option value="10">10</option>
+                    <option value="9">9</option>
+                    <option value="8">8</option>
+                    <option value="7">7</option>
+                    <option value="6">6</option>
+                    <option value="5">5</option>
+                    <option value="4">4</option>
+                    <option value="3">3</option>
+                    <option value="2">2</option>
+                </select>
+            </div>
+
+            <div class="form-group" id="suit-group" style="display: none;">
+                <label>Масть (опционально для Стрит-Флеша и Рояля):</label>
+                <select id="bid-suit">
+                    <option value="">Без масти</option>
+                    <option value="C">♣ Трефы (CLUBS)</option>
+                    <option value="D">♦ Бубны (DIAMONDS)</option>
+                    <option value="H">♥ Червы (HEARTS)</option>
+                    <option value="S">♠ Пики (SPADES)</option>
+                </select>
+            </div>
+
+            <button onclick="sendAction('RAISE')">Повысить ставку / Заявить комбинацию</button>
+            <button id="btn-challenge" class="btn-challenge" onclick="sendAction('CHALLENGE')" style="display: none;">НЕ ВЕРЮ! (Вскрыть карты)</button>
+        </div>
+
+        <div class="block">
+            <h3>Игроки за столом:</h3>
+            <div id="players-list">Ожидание данных...</div>
+        </div>
+
+        <div class="block">
+            <h3>История ставок (Текущий раунд):</h3>
+            <ul id="bids-history">
+                <li>Ставок пока нет</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const playerId = "{{ player_id }}";
+        const eventSource = new EventSource(`/api/game/stream/${playerId}`);
+
+        // Хелпер, который скрывает или показывает поля формы в зависимости от выбранного типа комбинации
+        function toggleFormFields() {
+            const type = parseInt(document.getElementById('bid-type').value);
+
+            const primaryGroup = document.getElementById('primary-rank-group');
+            const secondaryGroup = document.getElementById('secondary-rank-group');
+            const suitGroup = document.getElementById('suit-group');
+            const primaryLabel = document.getElementById('primary-label');
+
+            // По умолчанию сбрасываем видимость
+            primaryGroup.style.display = "block";
+            secondaryGroup.style.display = "none";
+            suitGroup.style.display = "none";
+            primaryLabel.innerText = "Достоинство карты:";
+
+            if (type === 5 || type === 7 || type === 9) { // Стрит, Флеш, Стрит-Флеш
+                primaryLabel.innerText = "Нижняя граница комбинации (номинал):";
+            }
+
+            if (type === 3 || type === 6) { // Две пары или Фулл Хаус
+                secondaryGroup.style.display = "block";
+            }
+
+            if (type === 9 || type === 10) { // Стрит-флеш или Рояль
+                suitGroup.style.display = "block";
+            }
+
+            if (type === 10) { // Флеш-Рояль номиналов не требует
+                primaryGroup.style.display = "none";
+            }
+        }
+
+        eventSource.onmessage = function(event) {
+            const gameState = JSON.parse(event.data);
+
+            // 1. Обновляем статус комнаты
+            document.getElementById('game-status').innerText = gameState.status;
+
+            const activePlayer = gameState.players[gameState.current_player_idx];
+            if (activePlayer) {
+                document.getElementById('current-player').innerText = `${activePlayer.name} (${activePlayer.id})`;
+            }
+
+            // Проверяем, наш ли сейчас ход
+            const isMyTurn = (activePlayer && activePlayer.id === playerId && gameState.status === "PLAYING");
+            const turnPanel = document.getElementById('turn-panel');
+
+            if (isMyTurn) {
+                turnPanel.style.display = "block";
+                // Показываем кнопку "Не верю" только если на столе уже есть чья-то ставка
+                document.getElementById('btn-challenge').style.display = gameState.bid_history.length > 0 ? "block" : "none";
+            } else {
+                turnPanel.style.display = "none";
+            }
+
+            // 2. Обновляем список игроков и карт
+            const playersListDiv = document.getElementById('players-list');
+            playersListDiv.innerHTML = '';
+
+            gameState.players.forEach((player, idx) => {
+                const isCurrent = idx === gameState.current_player_idx;
+                const isMe = player.id === playerId;
+
+                let playerLine = `<div style="margin-bottom: 10px; border-bottom: 1px dashed #333; padding-bottom: 5px;">`;
+
+                let nameSpan = `<span>${player.name} [${player.id}]</span>`;
+                if (isCurrent && gameState.status === "PLAYING") nameSpan = `<span class="current-turn">➔ ${player.name} (Ходит)</span>`;
+                if (player.is_eliminated) nameSpan = `<span class="eliminated">${player.name} (Выбыл)</span>`;
+                if (isMe) nameSpan += ` <span style="color: #00ffff;">(ВЫ)</span>`;
+
+                playerLine += nameSpan + `<br>&nbsp;&nbsp;Карты: `;
+
+                if (player.cards.length === 0) {
+                    playerLine += `нет карт`;
+                } else {
+                    playerLine += player.cards.map(card => {
+                        if (card.is_unknown) return `[🂠 Рубашка]`;
+                        const ranks = {11:'В', 12:'Д', 13:'К', 14:'Т'};
+                        const suits = {'C':'♣', 'D':'♦', 'H':'♥', 'S':'♠'};
+                        return `[${ranks[card.rank] || card.rank}${suits[card.suit]}]`;
+                    }).join(' ');
+                }
+
+                if (player.last_bid) {
+                    const comboNames = {1:'Старшая карта', 2:'Пара', 3:'Две пары', 4:'Сет', 5:'Стрит', 6:'Фулл Хаус', 7:'Флеш', 8:'Каре', 9:'Стрит-Флеш', 10:'Флеш-Рояль'};
+                    playerLine += `<br>&nbsp;&nbsp;<span style="color: #888;">Заявление раунда: ${comboNames[player.last_bid.type]}</span>`;
+                }
+
+                playerLine += `</div>`;
+                playersListDiv.innerHTML += playerLine;
+            });
+
+            // 3. Обновляем историю ставок
+            const bidsUl = document.getElementById('bids-history');
+            bidsUl.innerHTML = '';
+
+            if (gameState.bid_history.length === 0) {
+                bidsUl.innerHTML = '<li>Ставок пока нет</li>';
+            } else {
+                const comboNames = {1:'Старшая карта', 2:'Пара', 3:'Две пары', 4:'Сет', 5:'Стрит', 6:'Фулл Хаус', 7:'Флеш', 8:'Каре', 9:'Стрит-Флеш', 10:'Флеш-Рояль'};
+                const ranks = {11:'Валет', 12:'Дама', 13:'Король', 14:'Туз'};
+                const suits = {'C':'♣', 'D':'♦', 'H':'♥', 'S':'♠'};
+
+                gameState.bid_history.forEach(bid => {
+                    const pRank = ranks[bid.rank_primary] || bid.rank_primary || '';
+                    const sRank = ranks[bid.rank_secondary] || bid.rank_secondary || '';
+                    const suitDisplay = bid.suit ? suits[bid.suit] : '';
+
+                    let bidText = `${comboNames[bid.type]} (${pRank}`;
+                    if (sRank) bidText += ` и ${sRank}`;
+                    if (suitDisplay) bidText += ` ${suitDisplay}`;
+                    bidText += `)`;
+
+                    bidsUl.innerHTML += `<li>Игрок <b>${bid.player_id}</b> заявил: ${bidText}</li>`;
+                });
+            }
+        };
+
+        // Функция отправки хода на сервер
+        // Исправленный вариант:
+        async function sendAction(actionType) {
+            const payload = {
+                player_id: playerId,
+                action: actionType
+            };
+
+            if (actionType === 'RAISE') {
+                payload.type = parseInt(document.getElementById('bid-type').value);
+
+                const pRank = document.getElementById('bid-primary-rank').value;
+                const sRank = document.getElementById('bid-secondary-rank').value;
+                const suit = document.getElementById('bid-suit').value;
+
+                if (document.getElementById('primary-rank-group').style.display !== 'none') {
+                    payload.rank_primary = parseInt(pRank);
+                }
+                if (document.getElementById('secondary-rank-group').style.display !== 'none') {
+                    payload.rank_secondary = parseInt(sRank);
+                }
+                if (document.getElementById('suit-group').style.display !== 'none' && suit !== "") {
+                    payload.suit = suit;
+                }
+            }
+
+            try {
+                const response = await fetch('/api/game/action', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json();
+                    alert("Ошибка валидации хода: " + (errData.detail || JSON.stringify(errData)));
+                }
+            } catch (err) {
+                alert("Ошибка соединения с сервером");
+            }
+        }
+
+        eventSource.onerror = function() {
+            console.error("SSE соединение разорвано.");
+        };
+    </script>
+</body>
+</html>
