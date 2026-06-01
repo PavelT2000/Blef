@@ -469,3 +469,74 @@ button.btn-gold:hover:not(:disabled) {
     .action-buttons { grid-template-columns: 1fr; }
     header { flex-direction: column; }
 }
+
+/* Страница правил */
+.rules-prose {
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--text-main);
+}
+
+.rules-prose h2 {
+    font-size: 18px;
+    color: var(--accent-gold);
+    margin: 28px 0 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.rules-prose h2:first-child {
+    margin-top: 0;
+}
+
+.rules-prose h3 {
+    font-size: 15px;
+    color: #55ff77;
+    margin: 18px 0 8px;
+}
+
+.rules-prose p {
+    margin: 0 0 12px;
+    color: var(--text-main);
+}
+
+.rules-prose ul, .rules-prose ol {
+    margin: 0 0 14px;
+    padding-left: 22px;
+}
+
+.rules-prose li {
+    margin-bottom: 6px;
+}
+
+.rules-prose table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    margin: 12px 0 16px;
+}
+
+.rules-prose th, .rules-prose td {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 8px 10px;
+    text-align: left;
+}
+
+.rules-prose th {
+    background: rgba(46, 204, 113, 0.12);
+    color: var(--accent-gold);
+}
+
+.rules-prose .note {
+    background: rgba(46, 204, 113, 0.08);
+    border-left: 3px solid var(--border-glow);
+    padding: 10px 14px;
+    border-radius: 0 8px 8px 0;
+    margin: 14px 0;
+    font-size: 14px;
+}
+
+.rules-nav {
+    margin-top: 20px;
+    text-align: center;
+}

@@ -78,6 +78,16 @@ async def home_page(request: Request):
 
 
 
+@app.get("/rules", response_class=HTMLResponse)
+
+async def rules_page(request: Request):
+
+    return templates.TemplateResponse(request, "rules.html", {})
+
+
+
+
+
 @app.get("/join/{room_code}", response_class=HTMLResponse)
 
 async def join_page(request: Request, room_code: str):
