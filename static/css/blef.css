@@ -200,6 +200,39 @@ header {
     font-size: 36px;
 }
 
+.poker-card.card-stack {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.poker-card.card-stack::after {
+    display: none;
+}
+
+.card-count-badge {
+    position: relative;
+    z-index: 2;
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--accent-gold);
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.85);
+    line-height: 1;
+}
+
+.my-hand-panel {
+    border-left: 4px solid var(--accent-gold);
+}
+
+.my-hand-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
 .player-card-row {
     background: rgba(255, 255, 255, 0.02);
     border: 1px solid rgba(255, 255, 255, 0.05);

@@ -63,6 +63,14 @@
             <button onclick="leaveRoom()" style="width:100%; margin-top:8px;">Покинуть комнату</button>
         </div>
 
+        <div id="my-hand-panel" class="poker-panel my-hand-panel" style="display:none;">
+            <div class="my-hand-meta">
+                <div class="panel-title" style="margin:0;">🃏 Ваши карты</div>
+                <span class="card-count-label" id="my-card-count"></span>
+            </div>
+            <div id="my-cards-container" class="cards-flex"></div>
+        </div>
+
         <div id="turn-panel" class="poker-panel accent-left" style="display:none;">
             <div class="panel-title">⚡ Ваш ход</div>
             <p class="hint-text">
@@ -139,7 +147,7 @@
         </div>
 
         <div class="poker-panel">
-            <div class="panel-title">👥 Карты за столом</div>
+            <div class="panel-title">👥 Другие игроки</div>
             <div id="players-list"><p class="hint-text">Ожидание данных...</p></div>
         </div>
 
@@ -162,6 +170,7 @@
         let turnTimerInterval = null;
         let currentShowdownKey = null;
         let showdownFinishing = false;
+        let actionInFlight = false;
 
         const COMBO_NAMES = {
             1: 'Старшая карта', 2: 'Пара', 3: 'Две пары', 4: 'Сет',
@@ -202,15 +211,48 @@
             </div>`;
         }
 
-        function renderPlayerCards(player, revealAll) {
+        function renderHiddenStack(cardCount) {
+            if (!cardCount) {
+                return '<span class="hint-text">нет карт</span>';
+            }
+            return `<div class="cards-flex">
+                <div class="poker-card shirt card-stack">
+                    <span class="card-count-badge">${cardCount}</span>
+                </div>
+            </div>`;
+        }
+
+        function renderOpenCards(player) {
             if (!player.cards || player.cards.length === 0) {
                 return '<span class="hint-text">нет карт</span>';
             }
-            const cards = player.cards.map(c => {
-                if (revealAll || !c.is_unknown) return renderPokerCard(c);
-                return renderPokerCard({ is_unknown: true });
+            return `<div class="cards-flex">${
+                player.cards.map(c => renderPokerCard(c)).join('')
+            }</div>`;
+        }
+
+        function renderOpponentCards(player, revealAll) {
+            if (revealAll) {
+                return renderOpenCards(player);
+            }
+            return renderHiddenStack(player.cards.length);
+        }
+
+        function setTurnControlsEnabled(enabled) {
+            document.querySelectorAll('#turn-panel button').forEach(btn => {
+                btn.disabled = !enabled;
             });
-            return `<div class="cards-flex">${cards.join('')}</div>`;
+        }
+
+        function getTurnPlayerId(gameState) {
+            if (gameState.status !== 'PLAYING' || !gameState.players.length) {
+                return null;
+            }
+            const p = gameState.players[gameState.current_player_idx];
+            if (!p || p.is_eliminated) {
+                return null;
+            }
+            return p.id;
         }
 
         function setStatusBadge(status) {
@@ -452,18 +494,29 @@
                     deckInfo.style.display = 'none';
                 }
 
-                const activePlayer = gameState.players[gameState.current_player_idx];
-                if (activePlayer && !activePlayer.is_eliminated) {
+                const turnPlayerId = getTurnPlayerId(gameState);
+                const activePlayer = turnPlayerId
+                    ? gameState.players.find(p => p.id === turnPlayerId)
+                    : null;
+
+                if (activePlayer) {
                     document.getElementById('current-player').innerText = activePlayer.name;
                 } else {
                     document.getElementById('current-player').innerText = '—';
                 }
 
-                const isMyTurn = activePlayer && activePlayer.id === playerId;
+                if (turnPlayerId !== playerId) {
+                    actionInFlight = false;
+                }
+
+                const isMyTurn = turnPlayerId === playerId && !actionInFlight;
                 if (isMyTurn) {
                     turnPanel.style.display = 'block';
+                    setTurnControlsEnabled(true);
                     document.getElementById('btn-challenge').style.display =
                         gameState.bid_history.length > 0 ? 'block' : 'none';
+                } else {
+                    setTurnControlsEnabled(false);
                 }
 
                 if (gameState.turn_deadline) {
@@ -473,16 +526,35 @@
                 }
             } else {
                 clearTurnCountdown();
+                if (gameState.status !== 'PLAYING') {
+                    actionInFlight = false;
+                }
             }
 
             const limit = gameState.elimination_limit || planned;
             const revealAll = gameState.status === 'SHOWDOWN' || gameState.status === 'GAME_OVER';
+            const showHands = gameState.status !== 'LOBBY';
+            const myHandPanel = document.getElementById('my-hand-panel');
+            const myCardsContainer = document.getElementById('my-cards-container');
+            const myCardCountEl = document.getElementById('my-card-count');
+
+            if (me && showHands) {
+                myHandPanel.style.display = 'block';
+                myCardCountEl.innerText = `Карт: ${me.cards.length} / ${limit}`;
+                myCardsContainer.innerHTML = me.cards.length
+                    ? renderOpenCards(me)
+                    : '<span class="hint-text">нет карт</span>';
+            } else {
+                myHandPanel.style.display = 'none';
+            }
+
             const playersListDiv = document.getElementById('players-list');
             playersListDiv.innerHTML = '';
 
-            gameState.players.forEach((player, idx) => {
-                const isCurrent = idx === gameState.current_player_idx;
-                const isMe = player.id === playerId;
+            const turnPlayerIdForUi = getTurnPlayerId(gameState);
+
+            gameState.players.filter(p => p.id !== playerId).forEach((player) => {
+                const isCurrent = player.id === turnPlayerIdForUi;
                 const rowClass = ['player-card-row'];
                 if (isCurrent && gameState.status === 'PLAYING' && !player.is_eliminated) {
                     rowClass.push('my-turn');
@@ -493,7 +565,6 @@
                 }
 
                 let nameHtml = `<strong>${player.name}</strong>`;
-                if (isMe) nameHtml += ` <span style="color:#55ff77;">(Вы)</span>`;
                 if (isCurrent && gameState.status === 'PLAYING' && !player.is_eliminated) {
                     nameHtml += ` <span style="color:#55ff77;">· ход</span>`;
                 }
@@ -506,7 +577,7 @@
                     bidHtml = `<span class="hint-text">Ждёт хода</span>`;
                 }
 
-                const cardsHtml = renderPlayerCards(player, revealAll);
+                const cardsHtml = renderOpponentCards(player, revealAll);
                 playersListDiv.innerHTML += `
                     <div class="${rowClass.join(' ')}">
                         <div class="player-meta">
@@ -549,6 +620,12 @@
         };
 
         async function sendAction(actionType) {
+            if (actionInFlight) return;
+
+            actionInFlight = true;
+            setTurnControlsEnabled(false);
+            document.getElementById('turn-panel').style.display = 'none';
+
             const payload = { player_id: playerId, room_code: roomCode, action: actionType };
             if (actionType === 'RAISE') {
                 payload.type = parseInt(document.getElementById('bid-type').value);
@@ -574,8 +651,12 @@
                 if (!response.ok) {
                     const errData = await response.json();
                     alert('Ошибка: ' + (errData.detail || JSON.stringify(errData)));
+                    actionInFlight = false;
                 }
-            } catch { alert('Ошибка соединения с сервером'); }
+            } catch {
+                alert('Ошибка соединения с сервером');
+                actionInFlight = false;
+            }
         }
 
         eventSource.onerror = function() { console.error('SSE соединение разорвано.'); };
