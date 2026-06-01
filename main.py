@@ -60,7 +60,7 @@ def _http_error(exc: ValueError) -> HTTPException:
 
 async def home_page(request: Request):
 
-    return templates.TemplateResponse("lobby.html", {"request": request, "room_code": ""})
+    return templates.TemplateResponse(request, "lobby.html", {"room_code": ""})
 
 
 
@@ -76,13 +76,7 @@ async def join_page(request: Request, room_code: str):
 
         raise HTTPException(status_code=404, detail="Комната не найдена")
 
-    return templates.TemplateResponse(
-
-        "lobby.html",
-
-        {"request": request, "room_code": code},
-
-    )
+    return templates.TemplateResponse(request, "lobby.html", {"room_code": code})
 
 
 
@@ -107,21 +101,13 @@ async def get_game_page(request: Request, room_code: str, player_id: str):
         )
 
     return templates.TemplateResponse(
-
+        request,
         "index.html",
-
         {
-
-            "request": request,
-
             "player_id": player_id,
-
             "room_code": code,
-
             "turn_timeout": TURN_TIMEOUT_SECONDS,
-
         },
-
     )
 
 

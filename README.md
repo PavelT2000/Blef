@@ -11,6 +11,23 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 Откройте в браузере: [http://127.0.0.1:8000](http://127.0.0.1:8000)
 
+На Linux (Orange Pi, VPS) для чистого venv лучше ставить только зависимости игры:
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements-app.txt
+uvicorn main:app --host 0.0.0.0 --port 9000
+```
+
+Для production без `--reload`:
+
+```bash
+uvicorn main:app --host 0.0.0.0 --port 9000 --workers 1
+```
+
+Убедитесь, что на сервере есть каталоги `templates/` и `static/css/`.
+
 ## Функциональность
 
 ### Комнаты
