@@ -1,6 +1,7 @@
 """Основной файл FastAPI приложения с поддержкой HTML-шаблонов."""
 
 import json
+from contextlib import asynccontextmanager
 
 
 
@@ -39,7 +40,18 @@ from sse_manager import sse_manager
 
 
 
-app = FastAPI(title="Блеф", description="Многопользовательская игра «Блеф»")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    room_manager.start_inactivity_cleanup()
+    yield
+    await room_manager.stop_inactivity_cleanup()
+
+
+app = FastAPI(
+    title="Блеф",
+    description="Многопользовательская игра «Блеф»",
+    lifespan=lifespan,
+)
 
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")

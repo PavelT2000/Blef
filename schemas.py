@@ -1,4 +1,5 @@
 """Модуль содержит Pydantic схемы для игроков, карт и ставок."""
+import time
 from typing import Optional, List
 from pydantic import BaseModel, Field, model_validator
 from enums import CombinationType, CardSuit, GameStatus
@@ -104,6 +105,10 @@ class GameState(BaseModel):
     )
     showdown_deadline: Optional[float] = Field(
         None, description="Unix-время автозавершения вскрытия"
+    )
+    last_activity_at: float = Field(
+        default_factory=time.time,
+        description="Unix-время последней активности в комнате (вход, ход, старт)",
     )
 
     @property

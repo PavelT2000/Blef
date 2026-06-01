@@ -14,7 +14,9 @@ from schemas import GameState, Player
 from config import (
     MAX_PLAYERS,
     MIN_PLAYERS,
+    ROOM_CLEANUP_INTERVAL_SECONDS,
     ROOM_CODE_LENGTH,
+    ROOM_INACTIVITY_SECONDS,
     SHOWDOWN_TIMEOUT_SECONDS,
     TURN_TIMEOUT_SECONDS,
     compute_elimination_limit,
@@ -61,7 +63,43 @@ class RoomManager:
     self._player_room: dict[str, str] = {}
     self._turn_tasks: dict[str, asyncio.Task] = {}
     self._showdown_tasks: dict[str, asyncio.Task] = {}
+    self._cleanup_task: Optional[asyncio.Task] = None
     self._lock = asyncio.Lock()
+
+  def _touch(self, state: GameState) -> None:
+    state.last_activity_at = time.time()
+
+  def start_inactivity_cleanup(self) -> None:
+    if self._cleanup_task is None or self._cleanup_task.done():
+      self._cleanup_task = asyncio.create_task(self._inactivity_cleanup_loop())
+
+  async def stop_inactivity_cleanup(self) -> None:
+    if self._cleanup_task and not self._cleanup_task.done():
+      self._cleanup_task.cancel()
+      try:
+        await self._cleanup_task
+      except asyncio.CancelledError:
+        pass
+    self._cleanup_task = None
+
+  async def _inactivity_cleanup_loop(self) -> None:
+    try:
+      while True:
+        await asyncio.sleep(ROOM_CLEANUP_INTERVAL_SECONDS)
+        await self._purge_inactive_rooms()
+    except asyncio.CancelledError:
+      pass
+
+  async def _purge_inactive_rooms(self) -> None:
+    now = time.time()
+    async with self._lock:
+      stale = [
+        code
+        for code, state in self._rooms.items()
+        if now - state.last_activity_at >= ROOM_INACTIVITY_SECONDS
+      ]
+      for code in stale:
+        await self._destroy_room_locked(code)
 
   def _generate_room_code(self) -> str:
     while True:
@@ -161,6 +199,7 @@ class RoomManager:
           state.logs.append(f"Ошибка автохода для {current.name}: {exc}")
           return
 
+        self._touch(state)
         await self._after_state_change_locked(room_code, state)
     except asyncio.CancelledError:
       pass
@@ -174,6 +213,7 @@ class RoomManager:
           return
         state = finalize_showdown(state)
         self._rooms[room_code] = state
+        self._touch(state)
         await self._after_state_change_locked(room_code, state)
     except asyncio.CancelledError:
       pass
@@ -209,18 +249,26 @@ class RoomManager:
       payload = f"data: {json.dumps(safe_state, ensure_ascii=False)}\n\n"
       await sse_manager.broadcast_to_player(player.id, payload)
 
+  async def _destroy_room_locked(self, room_code: str) -> bool:
+    """Удаляет комнату и уведомляет игроков. Вызывать под lock."""
+    state = self._rooms.get(room_code)
+    if not state:
+      return False
+
+    self._cancel_all_timers(room_code)
+    closed_payload = 'data: {"room_closed": true}\n\n'
+    for player in list(state.players):
+      await sse_manager.broadcast_to_player(player.id, closed_payload)
+      self._player_room.pop(player.id, None)
+    del self._rooms[room_code]
+    return True
+
   async def _destroy_room_if_empty(self, room_code: str) -> bool:
     """Удаляет комнату без игроков. Возвращает True, если комната удалена."""
     state = self._rooms.get(room_code)
     if not state or state.players:
       return False
-
-    self._cancel_all_timers(room_code)
-    for pid in list(self._player_room):
-      if self._player_room.get(pid) == room_code:
-        del self._player_room[pid]
-    del self._rooms[room_code]
-    return True
+    return await self._destroy_room_locked(room_code)
 
   async def remove_player(self, room_code: str, player_id: str) -> Optional[GameState]:
     room_code = room_code.upper()
@@ -289,6 +337,7 @@ class RoomManager:
       )
       state.players.append(player)
       self._player_room[player.id] = room_code
+      self._touch(state)
       state.logs.append(
         f"{name} присоединился ({len(state.players)}/{MAX_PLAYERS})"
       )
@@ -315,6 +364,7 @@ class RoomManager:
         )
 
       state.elimination_limit = elimination_limit
+      self._touch(state)
       deal_initial_cards(state)
       state.status = GameStatus.PLAYING
       state.current_player_idx = 0
@@ -342,6 +392,7 @@ class RoomManager:
       self._cancel_turn_timer(room_code)
       state = handle_player_action(state, request)
       self._rooms[room_code] = state
+      self._touch(state)
       await self._after_state_change_locked(room_code, state)
       return state
 
@@ -359,6 +410,7 @@ class RoomManager:
       self._cancel_showdown_timer(room_code)
       state = finalize_showdown(state)
       self._rooms[room_code] = state
+      self._touch(state)
       await self._after_state_change_locked(room_code, state)
       return state
 
@@ -388,6 +440,7 @@ class RoomManager:
         status=GameStatus.LOBBY,
         players=kept_players,
         logs=[f"Комната {code} сброшена. Ожидание игроков."],
+        last_activity_at=time.time(),
       )
       for p in kept_players:
         self._player_room[p.id] = room_code
