@@ -26,45 +26,23 @@ class Bid(BaseModel):
         if self.type in [
             CombinationType.HIGH_CARD, CombinationType.PAIR,
             CombinationType.SET, CombinationType.STREET,
-            CombinationType.FLASH, CombinationType.KARE
+            CombinationType.KARE
         ]:
             if self.rank_primary is None or self.rank_secondary is not None or self.suit is not None:
                 raise ValueError("Некорректные параметры для базовой комбинации")
+        if self.type in (CombinationType.FLASH, CombinationType.STREET_FLASH):
+            if self.rank_primary is None or self.rank_secondary is not None:
+                raise ValueError("Некорректные параметры для флеша / стрит-флеша")
+        if self.type == CombinationType.FLASH_ROYAL:
+            if self.rank_primary is not None or self.rank_secondary is not None:
+                raise ValueError("Для Флеш-Рояля поля rank_primary/rank_secondary не нужны")
         return self
 
     def __gt__(self, other: Optional["Bid"]) -> bool:
-        """Сравнивает текущую ставку с предыдущей.
+        """Сравнивает текущую ставку с предыдущей (см. bid_comparison)."""
+        from bid_comparison import is_bid_stronger
 
-        Возвращает True, если текущая ставка строго сильнее.
-        """
-        if other is None:
-            return True
-
-        # 1. По типу комбинации (Иерархия от 1 до 10)
-        if self.type != other.type:
-            return self.type > other.type
-
-        # Если тип одинаковый, сравниваем параметры по правилам bets.txt
-        # У Стрит-Флеша и Рояля опциональная масть усиливает ставку
-        if self.type in [CombinationType.STREET_FLASH, CombinationType.FLASH_ROYAL]:
-            if self.suit and not other.suit:
-                return True
-            if not self.suit and other.suit:
-                return False
-
-        # Сравниваем по первичному рангу
-        sp = self.rank_primary or 0
-        op = other.rank_primary or 0
-        if sp != op:
-            return sp > op
-
-        # Сравниваем по вторичному рангу (Две пары, Фулл хаус)
-        ss = self.rank_secondary or 0
-        os = other.rank_secondary or 0
-        if ss != os:
-            return ss > os
-
-        return False
+        return is_bid_stronger(self, other)
 
 class Player(BaseModel):
     """Схема состояния конкретного игрока."""
@@ -102,6 +80,30 @@ class GameState(BaseModel):
     )
     logs: List[str] = Field(
         default_factory=list, description="История игровых логов (кто кого вскрыл, кто выбыл)"
+    )
+    deck: List[Card] = Field(
+        default_factory=list, description="Неразданные карты (остаток колоды)"
+    )
+    elimination_limit: int = Field(
+        6, ge=4, le=12, description="Сколько карт на руках — выбывание"
+    )
+    showdown_loser_id: Optional[str] = Field(
+        None, description="ID проигравшего раунд (фаза вскрытия)"
+    )
+    showdown_message: Optional[str] = Field(
+        None, description="Сообщение для экрана вскрытия"
+    )
+    showdown_combination_found: Optional[bool] = Field(
+        None, description="Была ли комбинация на столе при вскрытии"
+    )
+    turn_deadline: Optional[float] = Field(
+        None, description="Unix-время окончания хода (серверный таймер)"
+    )
+    turn_generation: int = Field(
+        0, description="Счётчик смены хода (инвалидация устаревших таймеров)"
+    )
+    showdown_deadline: Optional[float] = Field(
+        None, description="Unix-время автозавершения вскрытия"
     )
 
     @property

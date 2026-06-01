@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Блеф — Вход в игру</title>
+    <link rel="stylesheet" href="/static/css/blef.css">
+</head>
+<body>
+    <div class="table-container">
+        <header>
+            <div class="room-title">
+                <h1>♠ Клуб Блеф ♣</h1>
+                <p class="room-meta">Создайте комнату или войдите по коду. В комнате — от 2 до 13 игроков.</p>
+            </div>
+        </header>
+
+        <div class="poker-panel lobby-panel">
+            <div class="panel-title">🎴 Новая комната</div>
+            <p class="hint-text">Получите код и ссылку для друзей.</p>
+            <button type="button" class="btn-gold" id="btn-create" style="width:100%;">Создать комнату</button>
+            <div id="created-room" class="room-box" style="display:none;">
+                <p class="hint-text" style="margin:0 0 6px;">Код комнаты:</p>
+                <p class="room-code" id="display-code"></p>
+                <p class="hint-text" style="margin-top:12px;">Ссылка для друзей:</p>
+                <a href="#" id="share-link" class="share-link"></a>
+            </div>
+        </div>
+
+        <div class="poker-panel">
+            <div class="panel-title">🚪 Войти в комнату</div>
+            <form id="join-form">
+                <div class="input-group" style="margin-bottom:12px;">
+                    <label for="room-code">Код комнаты</label>
+                    <input type="text" id="room-code" maxlength="8" placeholder="Например: A1B2C3"
+                           value="{{ room_code }}" required>
+                </div>
+                <div class="input-group" style="margin-bottom:16px;">
+                    <label for="player-name">Ваше имя</label>
+                    <input type="text" id="player-name" name="name" maxlength="32"
+                           placeholder="Например: Алексей" required autofocus>
+                </div>
+                <button type="submit" style="width:100%;">Войти за стол</button>
+            </form>
+            <p id="error-msg" class="error-msg"></p>
+            <p class="hint-text" style="margin-top:14px;">
+                Лимит карт для выбывания: ⌊52÷игроков⌋, в диапазоне от 4 до 12.
+            </p>
+        </div>
+    </div>
+
+    <script>
+        const prefillCode = "{{ room_code }}".trim().toUpperCase();
+        if (prefillCode) {
+            document.getElementById('room-code').value = prefillCode;
+        }
+
+        document.getElementById('btn-create').addEventListener('click', async () => {
+            const errorEl = document.getElementById('error-msg');
+            errorEl.style.display = 'none';
+            try {
+                const response = await fetch('/api/rooms/create', { method: 'POST' });
+                if (!response.ok) {
+                    const err = await response.json();
+                    errorEl.innerText = err.detail || 'Не удалось создать комнату';
+                    errorEl.style.display = 'block';
+                    return;
+                }
+                const data = await response.json();
+                const code = data.room_code;
+                document.getElementById('room-code').value = code;
+                document.getElementById('display-code').innerText = code;
+                const link = window.location.origin + '/join/' + code;
+                const linkEl = document.getElementById('share-link');
+                linkEl.href = link;
+                linkEl.innerText = link;
+                document.getElementById('created-room').style.display = 'block';
+            } catch {
+                errorEl.innerText = 'Ошибка соединения с сервером';
+                errorEl.style.display = 'block';
+            }
+        });
+
+        document.getElementById('join-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('player-name').value.trim();
+            const roomCode = document.getElementById('room-code').value.trim().toUpperCase();
+            const errorEl = document.getElementById('error-msg');
+            errorEl.style.display = 'none';
+
+            if (!name || !roomCode) {
+                errorEl.innerText = 'Укажите код комнаты и имя';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/game/join', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, room_code: roomCode }),
+                });
+                if (!response.ok) {
+                    const err = await response.json();
+                    const detail = err.detail;
+                    errorEl.innerText = typeof detail === 'string' ? detail : JSON.stringify(detail);
+                    errorEl.style.display = 'block';
+                    return;
+                }
+                const data = await response.json();
+                window.location.href = data.game_url;
+            } catch {
+                errorEl.innerText = 'Ошибка соединения с сервером';
+                errorEl.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>

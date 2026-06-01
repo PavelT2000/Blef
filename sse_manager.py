@@ -29,5 +29,11 @@ class SSEManager:
             for queue in self._connections[player_id]:
                 await queue.put(data)
 
+    async def broadcast_to_all(self, data: str) -> None:
+        """Отправляет JSON-строку во все активные SSE-подключения."""
+        for queues in self._connections.values():
+            for queue in queues:
+                await queue.put(data)
+
 # Создаем глобальный синглтон менеджера
 sse_manager = SSEManager()

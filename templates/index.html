@@ -2,288 +2,583 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Блеф — Текстовый Интерфейс</title>
-    <style>
-        body { font-family: monospace; background: #121212; color: #00ff00; padding: 20px; }
-        .container { max-width: 600px; margin: 0 auto; }
-        .block { border: 1px solid #00ff00; padding: 15px; margin-bottom: 20px; border-radius: 5px; }
-        h3 { margin-top: 0; color: #ffff00; }
-        ul { list-style-type: none; padding-left: 0; }
-        li { margin-bottom: 5px; }
-        .current-turn { color: #ff00ff; font-weight: bold; }
-        .eliminated { color: #555; text-decoration: line-through; }
-
-        /* Стили для формы ходов */
-        .action-panel { background: #1a1a1a; padding: 15px; border: 2px dashed #ff00ff; border-radius: 5px; margin-top: 20px; }
-        select, button { background: #222; color: #00ff00; border: 1px solid #00ff00; padding: 8px; margin: 5px 0; font-family: monospace; font-size: 14px; width: 100%; box-sizing: border-box; }
-        button:hover { background: #00ff00; color: #000; cursor: pointer; }
-        button.btn-challenge { border-color: #ff0000; color: #ff0000; }
-        button.btn-challenge:hover { background: #ff0000; color: #000; }
-        .form-group { margin-bottom: 10px; }
-        label { display: block; color: #aaa; font-size: 12px; margin-bottom: 2px; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Блеф — Покерный Клуб</title>
+    <link rel="stylesheet" href="/static/css/blef.css">
 </head>
 <body>
-    <div class="container">
-        <h1>Игра "Блеф" — Вы вошли как: <span style="color: #fff;">{{ player_id }}</span></h1>
+    <div class="table-container">
+        <header>
+            <div class="room-title">
+                <h1>♠ Клуб Блеф ♣</h1>
+                <div class="room-meta">
+                    Вы: <strong id="my-name">...</strong>
+                    · Комната: <strong id="room-code-display">{{ room_code }}</strong>
+                    · <a href="/join/{{ room_code }}">пригласить</a>
+                </div>
+            </div>
+            <div class="header-actions">
+                <div class="status-badge" id="game-status">Загрузка...</div>
+                <div class="info-row" id="turn-info" style="margin:0;">Ход: <strong id="current-player">—</strong></div>
+                <div class="info-row turn-timer" id="turn-timer" style="display:none; margin:0;">
+                    ⏱ <span id="turn-timer-value">{{ turn_timeout }}</span> сек
+                </div>
+                <div class="info-row" id="deck-info" style="display:none; margin:0;">
+                    Колода: <strong><span id="deck-count">52</span></strong> карт
+                </div>
+                <div class="info-row" id="current-bid-row" style="display:none; margin:0;">
+                    Текущая ставка:
+                    <span id="current-bid-text" class="current-bid-badge">—</span>
+                </div>
+            </div>
+        </header>
 
-        <div class="block">
-            <h3>Статус Комнаты: <span id="game-status">Загрузка...</span></h3>
-            <p>Сейчас ход: <span id="current-player">...</span></p>
+        <div id="lobby-panel" class="poker-panel lobby-panel" style="display:none;">
+            <div class="panel-title">🎴 Лобби</div>
+            <p id="lobby-hint" class="hint-text">Ожидание игроков...</p>
+            <div class="lobby-limit-badge" id="lobby-limit-info">
+                Лимит выбывания: <strong id="planned-limit">—</strong> карт
+                <span class="hint-text">(⌊52÷игроков⌋, от 4 до 12)</span>
+            </div>
+            <button id="btn-start" class="btn-gold" onclick="startGame()" disabled style="margin-top:16px; width:100%;">
+                Начать игру (нужно мин. 2 игрока)
+            </button>
         </div>
 
-        <div id="turn-panel" class="action-panel" style="display: none;">
-            <h3 style="color: #ff00ff; margin-bottom: 10px;">➔ ВАШ ХОД! Сделайте заявление:</h3>
-
-            <div class="form-group">
-                <label>Тип комбинации:</label>
-                <select id="bid-type" onchange="toggleFormFields()">
-                    <option value="1">Старшая карта</option>
-                    <option value="2">Пара</option>
-                    <option value="3">Две пары</option>
-                    <option value="4">Сет (Тройка)</option>
-                    <option value="5">Стрит</option>
-                    <option value="6">Фулл Хаус</option>
-                    <option value="7">Флеш</option>
-                    <option value="8">Каре</option>
-                    <option value="9">Стрит-Флеш</option>
-                    <option value="10">Флеш-Рояль</option>
-                </select>
-            </div>
-
-            <div class="form-group" id="primary-rank-group">
-                <label id="primary-label">Достоинство карты / Нижняя граница:</label>
-                <select id="bid-primary-rank">
-                    <option value="14">Туз (Т)</option>
-                    <option value="13">Король (К)</option>
-                    <option value="12">Дама (Д)</option>
-                    <option value="11">Валет (В)</option>
-                    <option value="10">10</option>
-                    <option value="9">9</option>
-                    <option value="8">8</option>
-                    <option value="7">7</option>
-                    <option value="6">6</option>
-                    <option value="5">5</option>
-                    <option value="4">4</option>
-                    <option value="3">3</option>
-                    <option value="2">2</option>
-                </select>
-            </div>
-
-            <div class="form-group" id="secondary-rank-group" style="display: none;">
-                <label>Второе достоинство (для 2 пар или Фулла):</label>
-                <select id="bid-secondary-rank">
-                    <option value="13">Король (К)</option>
-                    <option value="14">Туз (Т)</option>
-                    <option value="12">Дама (Д)</option>
-                    <option value="11">Валет (В)</option>
-                    <option value="10">10</option>
-                    <option value="9">9</option>
-                    <option value="8">8</option>
-                    <option value="7">7</option>
-                    <option value="6">6</option>
-                    <option value="5">5</option>
-                    <option value="4">4</option>
-                    <option value="3">3</option>
-                    <option value="2">2</option>
-                </select>
-            </div>
-
-            <div class="form-group" id="suit-group" style="display: none;">
-                <label>Масть (опционально для Стрит-Флеша и Рояля):</label>
-                <select id="bid-suit">
-                    <option value="">Без масти</option>
-                    <option value="C">♣ Трефы (CLUBS)</option>
-                    <option value="D">♦ Бубны (DIAMONDS)</option>
-                    <option value="H">♥ Червы (HEARTS)</option>
-                    <option value="S">♠ Пики (SPADES)</option>
-                </select>
-            </div>
-
-            <button onclick="sendAction('RAISE')">Повысить ставку / Заявить комбинацию</button>
-            <button id="btn-challenge" class="btn-challenge" onclick="sendAction('CHALLENGE')" style="display: none;">НЕ ВЕРЮ! (Вскрыть карты)</button>
+        <div id="showdown-panel" class="poker-panel showdown-panel" style="display:none;">
+            <div class="panel-title danger">🔍 Вскрытие</div>
+            <p id="showdown-text"></p>
+            <div class="showdown-loser-box" id="showdown-loser" style="display:none;"></div>
+            <p id="showdown-countdown" class="hint-text" style="margin-top:12px;"></p>
+            <button id="btn-skip-showdown" class="btn-bluff" onclick="finishShowdown()" style="display:none; width:100%; margin-top:8px;">
+                Пропустить (следующий раунд)
+            </button>
         </div>
 
-        <div class="block">
-            <h3>Игроки за столом:</h3>
-            <div id="players-list">Ожидание данных...</div>
+        <div id="gameover-panel" class="poker-panel gameover-panel" style="display:none;">
+            <div class="panel-title">🏆 Игра окончена</div>
+            <p id="winner-text" style="font-size:16px;"></p>
+            <button class="btn-gold" onclick="resetGame()" style="width:100%; margin-top:12px;">Новая игра (лобби)</button>
+            <button onclick="leaveRoom()" style="width:100%; margin-top:8px;">Покинуть комнату</button>
         </div>
 
-        <div class="block">
-            <h3>История ставок (Текущий раунд):</h3>
-            <ul id="bids-history">
-                <li>Ставок пока нет</li>
-            </ul>
+        <div id="turn-panel" class="poker-panel accent-left" style="display:none;">
+            <div class="panel-title">⚡ Ваш ход</div>
+            <p class="hint-text">
+                По таймауту ({{ turn_timeout }} сек): «Не верю», если есть ставка; иначе «Старшая карта 2».
+            </p>
+            <p id="bid-param-hint" class="hint-text" style="border-left: 2px solid var(--accent-gold); padding-left: 10px;"></p>
+            <div class="bet-grid">
+                <div class="input-group">
+                    <label>Комбинация</label>
+                    <select id="bid-type" onchange="toggleFormFields()">
+                        <option value="1">Старшая карта</option>
+                        <option value="2">Пара</option>
+                        <option value="3">Две пары</option>
+                        <option value="4">Сет (Тройка)</option>
+                        <option value="5">Стрит</option>
+                        <option value="6">Фулл Хаус</option>
+                        <option value="7">Флеш</option>
+                        <option value="8">Каре</option>
+                        <option value="9">Стрит-Флеш</option>
+                        <option value="10">Флеш-Рояль</option>
+                    </select>
+                </div>
+                <div class="input-group" id="primary-rank-group">
+                    <label id="primary-label">Достоинство / граница</label>
+                    <select id="bid-primary-rank">
+                        <option value="14">Туз (Т)</option>
+                        <option value="13">Король (К)</option>
+                        <option value="12">Дама (Д)</option>
+                        <option value="11">Валет (В)</option>
+                        <option value="10">10</option>
+                        <option value="9">9</option>
+                        <option value="8">8</option>
+                        <option value="7">7</option>
+                        <option value="6">6</option>
+                        <option value="5">5</option>
+                        <option value="4">4</option>
+                        <option value="3">3</option>
+                        <option value="2">2</option>
+                    </select>
+                </div>
+                <div class="input-group" id="secondary-rank-group" style="display:none;">
+                    <label id="secondary-label">Второе достоинство</label>
+                    <select id="bid-secondary-rank">
+                        <option value="13">Король (К)</option>
+                        <option value="14">Туз (Т)</option>
+                        <option value="12">Дама (Д)</option>
+                        <option value="11">Валет (В)</option>
+                        <option value="10">10</option>
+                        <option value="9">9</option>
+                        <option value="8">8</option>
+                        <option value="7">7</option>
+                        <option value="6">6</option>
+                        <option value="5">5</option>
+                        <option value="4">4</option>
+                        <option value="3">3</option>
+                        <option value="2">2</option>
+                    </select>
+                </div>
+                <div class="input-group" id="suit-group" style="display:none;">
+                    <label>Масть</label>
+                    <select id="bid-suit">
+                        <option value="">Любая</option>
+                        <option value="C">♣ Трефы</option>
+                        <option value="D">♦ Бубны</option>
+                        <option value="H">♥ Червы</option>
+                        <option value="S">♠ Пики</option>
+                    </select>
+                </div>
+            </div>
+            <div class="action-buttons">
+                <button onclick="sendAction('RAISE')">Повысить / Заявить</button>
+                <button id="btn-challenge" class="btn-bluff" onclick="sendAction('CHALLENGE')" style="display:none;">НЕ ВЕРЮ!</button>
+            </div>
+        </div>
+
+        <div class="poker-panel">
+            <div class="panel-title">👥 Карты за столом</div>
+            <div id="players-list"><p class="hint-text">Ожидание данных...</p></div>
+        </div>
+
+        <div class="poker-panel" id="raises-panel" style="display:none;">
+            <div class="panel-title">📈 Повышения в раунде</div>
+            <div id="raises-box" class="raises-list"></div>
+        </div>
+
+        <div class="footer-actions">
+            <button class="btn-sm" onclick="leaveRoom()">Покинуть комнату</button>
         </div>
     </div>
 
     <script>
         const playerId = "{{ player_id }}";
-        const eventSource = new EventSource(`/api/game/stream/${playerId}`);
+        const roomCode = "{{ room_code }}";
+        const DEFAULT_TURN_TIMEOUT = {{ turn_timeout }};
+        const eventSource = new EventSource(`/api/game/stream/${roomCode}/${playerId}`);
+        let showdownTimer = null;
+        let turnTimerInterval = null;
+        let currentShowdownKey = null;
+        let showdownFinishing = false;
 
-        // Хелпер, который скрывает или показывает поля формы в зависимости от выбранного типа комбинации
+        const COMBO_NAMES = {
+            1: 'Старшая карта', 2: 'Пара', 3: 'Две пары', 4: 'Сет',
+            5: 'Стрит', 6: 'Фулл Хаус', 7: 'Флеш', 8: 'Каре',
+            9: 'Стрит-флеш', 10: 'Флеш-Рояль'
+        };
+        const RANK_LABELS = { 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
+        const RANK_NAMES = { 11: 'Валет', 12: 'Дама', 13: 'Король', 14: 'Туз' };
+        const SUIT_SYMBOLS = { C: '♣', D: '♦', H: '♥', S: '♠' };
+
+        function playerNameById(players, id) {
+            const p = players.find(x => x.id === id);
+            return p ? p.name : id;
+        }
+
+        function formatBidText(bid) {
+            const pRank = RANK_NAMES[bid.rank_primary] || bid.rank_primary || '';
+            const sRank = RANK_NAMES[bid.rank_secondary] || bid.rank_secondary || '';
+            const suitDisplay = bid.suit ? SUIT_SYMBOLS[bid.suit] : '';
+            let text = `${COMBO_NAMES[bid.type]} (${pRank}`;
+            if (sRank) text += ` и ${sRank}`;
+            if (suitDisplay) text += ` ${suitDisplay}`;
+            text += ')';
+            return text;
+        }
+
+        function renderPokerCard(card) {
+            if (card.is_unknown) {
+                return '<div class="poker-card shirt"></div>';
+            }
+            const rank = RANK_LABELS[card.rank] || String(card.rank);
+            const suit = card.suit;
+            const sym = SUIT_SYMBOLS[suit] || '';
+            return `<div class="poker-card suit-${suit}">
+                <div class="card-corner">${rank}<span>${sym}</span></div>
+                <div class="card-center-icon">${sym}</div>
+                <div class="card-corner bottom">${rank}<span>${sym}</span></div>
+            </div>`;
+        }
+
+        function renderPlayerCards(player, revealAll) {
+            if (!player.cards || player.cards.length === 0) {
+                return '<span class="hint-text">нет карт</span>';
+            }
+            const cards = player.cards.map(c => {
+                if (revealAll || !c.is_unknown) return renderPokerCard(c);
+                return renderPokerCard({ is_unknown: true });
+            });
+            return `<div class="cards-flex">${cards.join('')}</div>`;
+        }
+
+        function setStatusBadge(status) {
+            const el = document.getElementById('game-status');
+            const labels = {
+                LOBBY: 'Лобби',
+                PLAYING: 'Идёт раунд',
+                SHOWDOWN: 'Вскрытие',
+                GAME_OVER: 'Конец игры',
+            };
+            el.textContent = labels[status] || status;
+            el.className = 'status-badge' + (
+                status === 'LOBBY' ? ' lobby' :
+                status === 'SHOWDOWN' ? ' showdown' :
+                status === 'GAME_OVER' ? ' over' : ''
+            );
+        }
+
+        const COMBO_PARAM_HINTS = {
+            1: 'Достоинство: на столе должна быть хотя бы одна карта этого ранга (ровно этот номинал).',
+            2: 'Достоинство: на столе минимум две карты этого ранга.',
+            3: 'Две пары разного достоинства (порядок полей не важен).',
+            4: 'Достоинство: на столе минимум три карты этого ранга.',
+            5: 'Нижняя граница включительна (≥): нужен стрит, у которого младшая карта не ниже выбранного ранга; карты ниже границы не считаются.',
+            6: 'Тройка и пара — точные достоинства (должны различаться).',
+            7: 'Нижняя граница включительна (≥): пять карт на столе с рангом не ниже выбранного; масть в заявке опциональна.',
+            8: 'Достоинство: на столе минимум четыре карты этого ранга.',
+            9: 'Как стрит: нижняя граница включительна (≥); масть в заявке опциональна и усиливает ставку при сравнении.',
+            10: 'Фиксированная комбинация 10–В–Д–К–Т; масть в заявке опциональна.',
+        };
+
         function toggleFormFields() {
             const type = parseInt(document.getElementById('bid-type').value);
-
             const primaryGroup = document.getElementById('primary-rank-group');
             const secondaryGroup = document.getElementById('secondary-rank-group');
             const suitGroup = document.getElementById('suit-group');
             const primaryLabel = document.getElementById('primary-label');
+            const secondaryLabel = document.getElementById('secondary-label');
+            const hintEl = document.getElementById('bid-param-hint');
 
-            // По умолчанию сбрасываем видимость
-            primaryGroup.style.display = "block";
-            secondaryGroup.style.display = "none";
-            suitGroup.style.display = "none";
-            primaryLabel.innerText = "Достоинство карты:";
+            primaryGroup.style.display = 'block';
+            secondaryGroup.style.display = 'none';
+            suitGroup.style.display = 'none';
+            primaryLabel.innerText = 'Достоинство (точное):';
+            secondaryLabel.innerText = 'Второе достоинство:';
 
-            if (type === 5 || type === 7 || type === 9) { // Стрит, Флеш, Стрит-Флеш
-                primaryLabel.innerText = "Нижняя граница комбинации (номинал):";
+            if (type === 5 || type === 9) {
+                primaryLabel.innerText = 'Нижняя граница (включительно, ≥):';
+            } else if (type === 7) {
+                primaryLabel.innerText = 'Нижний ранг карт (включительно, ≥):';
             }
-
-            if (type === 3 || type === 6) { // Две пары или Фулл Хаус
-                secondaryGroup.style.display = "block";
+            if (type === 3) {
+                secondaryGroup.style.display = 'block';
+                primaryLabel.innerText = 'Старшая пара (точное):';
+                secondaryLabel.innerText = 'Младшая пара (точное):';
             }
-
-            if (type === 9 || type === 10) { // Стрит-флеш или Рояль
-                suitGroup.style.display = "block";
+            if (type === 6) {
+                secondaryGroup.style.display = 'block';
+                primaryLabel.innerText = 'Тройка (точное):';
+                secondaryLabel.innerText = 'Пара (точное):';
             }
+            if (type === 7 || type === 9 || type === 10) suitGroup.style.display = 'block';
+            if (type === 10) primaryGroup.style.display = 'none';
 
-            if (type === 10) { // Флеш-Рояль номиналов не требует
-                primaryGroup.style.display = "none";
+            hintEl.innerText = COMBO_PARAM_HINTS[type] || '';
+        }
+
+        function clearShowdownCountdown() {
+            if (showdownTimer) { clearInterval(showdownTimer); showdownTimer = null; }
+            document.getElementById('showdown-countdown').innerText = '';
+            document.getElementById('btn-skip-showdown').style.display = 'none';
+        }
+
+        function clearTurnCountdown() {
+            if (turnTimerInterval) { clearInterval(turnTimerInterval); turnTimerInterval = null; }
+            document.getElementById('turn-timer').style.display = 'none';
+        }
+
+        function startTurnCountdown(deadlineUnix) {
+            clearTurnCountdown();
+            const timerEl = document.getElementById('turn-timer');
+            const valueEl = document.getElementById('turn-timer-value');
+            timerEl.style.display = 'block';
+            function tick() {
+                const left = Math.max(0, Math.ceil(deadlineUnix - Date.now() / 1000));
+                valueEl.innerText = left;
+                if (left <= 0) clearTurnCountdown();
             }
+            tick();
+            turnTimerInterval = setInterval(tick, 250);
+        }
+
+        function startShowdownCountdown(deadlineUnix) {
+            clearShowdownCountdown();
+            const countdownEl = document.getElementById('showdown-countdown');
+            const skipBtn = document.getElementById('btn-skip-showdown');
+            skipBtn.style.display = 'block';
+            function tick() {
+                const left = Math.max(0, Math.ceil(deadlineUnix - Date.now() / 1000));
+                if (left <= 0) finishShowdown();
+                else countdownEl.innerText = `Следующий раунд через ${left} сек...`;
+            }
+            tick();
+            showdownTimer = setInterval(tick, 250);
+        }
+
+        async function finishShowdown() {
+            if (showdownFinishing) return;
+            showdownFinishing = true;
+            clearShowdownCountdown();
+            try {
+                await fetch('/api/game/finish-showdown', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ player_id: playerId, room_code: roomCode }),
+                });
+            } catch { alert('Ошибка соединения с сервером'); }
+            finally { showdownFinishing = false; }
+        }
+
+        async function leaveRoom() {
+            try {
+                await fetch('/api/game/leave', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ player_id: playerId, room_code: roomCode }),
+                });
+            } catch { /* ignore */ }
+            window.location.href = '/';
+        }
+
+        async function startGame() {
+            try {
+                const response = await fetch('/api/game/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ player_id: playerId, room_code: roomCode }),
+                });
+                if (!response.ok) {
+                    const err = await response.json();
+                    alert(err.detail || 'Не удалось начать игру');
+                }
+            } catch { alert('Ошибка соединения с сервером'); }
+        }
+
+        async function resetGame() {
+            try {
+                const response = await fetch('/api/game/reset', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ player_id: playerId, room_code: roomCode }),
+                });
+                if (!response.ok) {
+                    const err = await response.json();
+                    alert(err.detail || 'Не удалось сбросить игру');
+                }
+            } catch { alert('Ошибка соединения с сервером'); }
         }
 
         eventSource.onmessage = function(event) {
             const gameState = JSON.parse(event.data);
-
-            // 1. Обновляем статус комнаты
-            document.getElementById('game-status').innerText = gameState.status;
-
-            const activePlayer = gameState.players[gameState.current_player_idx];
-            if (activePlayer) {
-                document.getElementById('current-player').innerText = `${activePlayer.name} (${activePlayer.id})`;
+            if (gameState.room_closed) {
+                alert('Комната закрыта — все игроки вышли.');
+                window.location.href = '/';
+                return;
             }
 
-            // Проверяем, наш ли сейчас ход
-            const isMyTurn = (activePlayer && activePlayer.id === playerId && gameState.status === "PLAYING");
+            const me = gameState.players && gameState.players.find(p => p.id === playerId);
+            if (me) document.getElementById('my-name').innerText = me.name;
+
+            setStatusBadge(gameState.status);
+
+            const lobbyPanel = document.getElementById('lobby-panel');
             const turnPanel = document.getElementById('turn-panel');
+            const showdownPanel = document.getElementById('showdown-panel');
+            const gameoverPanel = document.getElementById('gameover-panel');
+            const turnInfo = document.getElementById('turn-info');
 
-            if (isMyTurn) {
-                turnPanel.style.display = "block";
-                // Показываем кнопку "Не верю" только если на столе уже есть чья-то ставка
-                document.getElementById('btn-challenge').style.display = gameState.bid_history.length > 0 ? "block" : "none";
+            lobbyPanel.style.display = 'none';
+            turnPanel.style.display = 'none';
+            showdownPanel.style.display = 'none';
+            gameoverPanel.style.display = 'none';
+
+            const planned = gameState.planned_elimination_limit || gameState.elimination_limit || 6;
+            document.getElementById('planned-limit').innerText = planned;
+
+            if (gameState.status === 'LOBBY') {
+                lobbyPanel.style.display = 'block';
+                turnInfo.style.display = 'none';
+                const count = gameState.players.length;
+                document.getElementById('lobby-hint').innerText =
+                    `В лобби: ${count} игрок(ов). Для старта нужно минимум 2.`;
+                const btnStart = document.getElementById('btn-start');
+                btnStart.disabled = count < 2;
+                btnStart.innerText = count < 2
+                    ? 'Начать игру (нужно мин. 2 игрока)'
+                    : 'Начать игру';
+            } else if (gameState.status === 'SHOWDOWN') {
+                showdownPanel.style.display = 'block';
+                turnInfo.style.display = 'none';
+                document.getElementById('deck-info').style.display = 'none';
+                document.getElementById('showdown-text').innerText =
+                    gameState.showdown_message || 'Карты вскрыты...';
+                const loser = gameState.players.find(p => p.id === gameState.showdown_loser_id);
+                const loserEl = document.getElementById('showdown-loser');
+                if (loser) {
+                    loserEl.innerText = `Проиграл раунд: ${loser.name}`;
+                    loserEl.style.display = 'block';
+                } else {
+                    loserEl.style.display = 'none';
+                }
+                clearTurnCountdown();
+                const showdownKey = `${gameState.showdown_loser_id}-${gameState.bid_history.length}`;
+                const sdDeadline = gameState.showdown_deadline
+                    || (Date.now() / 1000 + (gameState.showdown_timeout_seconds || 10));
+                if (showdownKey !== currentShowdownKey) {
+                    currentShowdownKey = showdownKey;
+                    startShowdownCountdown(sdDeadline);
+                }
             } else {
-                turnPanel.style.display = "none";
+                currentShowdownKey = null;
+                clearShowdownCountdown();
             }
 
-            // 2. Обновляем список игроков и карт
+            if (gameState.status === 'GAME_OVER') {
+                gameoverPanel.style.display = 'block';
+                turnInfo.style.display = 'none';
+                const winnerLog = [...gameState.logs].reverse().find(l => l.includes('Победитель'));
+                const active = gameState.players.filter(p => !p.is_eliminated);
+                document.getElementById('winner-text').innerText = winnerLog ||
+                    (active.length ? `Победитель: ${active[0].name}` : 'Игра завершена');
+            } else if (gameState.status === 'PLAYING') {
+                turnInfo.style.display = 'block';
+                const deckInfo = document.getElementById('deck-info');
+                if (gameState.deck_count !== undefined) {
+                    deckInfo.style.display = 'block';
+                    document.getElementById('deck-count').innerText = gameState.deck_count;
+                } else {
+                    deckInfo.style.display = 'none';
+                }
+
+                const activePlayer = gameState.players[gameState.current_player_idx];
+                if (activePlayer && !activePlayer.is_eliminated) {
+                    document.getElementById('current-player').innerText = activePlayer.name;
+                } else {
+                    document.getElementById('current-player').innerText = '—';
+                }
+
+                const isMyTurn = activePlayer && activePlayer.id === playerId;
+                if (isMyTurn) {
+                    turnPanel.style.display = 'block';
+                    document.getElementById('btn-challenge').style.display =
+                        gameState.bid_history.length > 0 ? 'block' : 'none';
+                }
+
+                if (gameState.turn_deadline) {
+                    startTurnCountdown(gameState.turn_deadline);
+                } else {
+                    clearTurnCountdown();
+                }
+            } else {
+                clearTurnCountdown();
+            }
+
+            const limit = gameState.elimination_limit || planned;
+            const revealAll = gameState.status === 'SHOWDOWN' || gameState.status === 'GAME_OVER';
             const playersListDiv = document.getElementById('players-list');
             playersListDiv.innerHTML = '';
 
             gameState.players.forEach((player, idx) => {
                 const isCurrent = idx === gameState.current_player_idx;
                 const isMe = player.id === playerId;
-
-                let playerLine = `<div style="margin-bottom: 10px; border-bottom: 1px dashed #333; padding-bottom: 5px;">`;
-
-                let nameSpan = `<span>${player.name} [${player.id}]</span>`;
-                if (isCurrent && gameState.status === "PLAYING") nameSpan = `<span class="current-turn">➔ ${player.name} (Ходит)</span>`;
-                if (player.is_eliminated) nameSpan = `<span class="eliminated">${player.name} (Выбыл)</span>`;
-                if (isMe) nameSpan += ` <span style="color: #00ffff;">(ВЫ)</span>`;
-
-                playerLine += nameSpan + `<br>&nbsp;&nbsp;Карты: `;
-
-                if (player.cards.length === 0) {
-                    playerLine += `нет карт`;
-                } else {
-                    playerLine += player.cards.map(card => {
-                        if (card.is_unknown) return `[🂠 Рубашка]`;
-                        const ranks = {11:'В', 12:'Д', 13:'К', 14:'Т'};
-                        const suits = {'C':'♣', 'D':'♦', 'H':'♥', 'S':'♠'};
-                        return `[${ranks[card.rank] || card.rank}${suits[card.suit]}]`;
-                    }).join(' ');
+                const rowClass = ['player-card-row'];
+                if (isCurrent && gameState.status === 'PLAYING' && !player.is_eliminated) {
+                    rowClass.push('my-turn');
+                }
+                if (player.is_eliminated) rowClass.push('eliminated');
+                if (gameState.status === 'SHOWDOWN' && player.id === gameState.showdown_loser_id) {
+                    rowClass.push('showdown-loser');
                 }
 
-                if (player.last_bid) {
-                    const comboNames = {1:'Старшая карта', 2:'Пара', 3:'Две пары', 4:'Сет', 5:'Стрит', 6:'Фулл Хаус', 7:'Флеш', 8:'Каре', 9:'Стрит-Флеш', 10:'Флеш-Рояль'};
-                    playerLine += `<br>&nbsp;&nbsp;<span style="color: #888;">Заявление раунда: ${comboNames[player.last_bid.type]}</span>`;
+                let nameHtml = `<strong>${player.name}</strong>`;
+                if (isMe) nameHtml += ` <span style="color:#55ff77;">(Вы)</span>`;
+                if (isCurrent && gameState.status === 'PLAYING' && !player.is_eliminated) {
+                    nameHtml += ` <span style="color:#55ff77;">· ход</span>`;
+                }
+                if (player.is_eliminated) nameHtml = `<span style="text-decoration:line-through;">${nameHtml}</span> <span class="hint-text">(выбыл)</span>`;
+
+                let bidHtml = '';
+                if (player.last_bid && gameState.status === 'PLAYING') {
+                    bidHtml = `<div class="player-bid-bubble">Заявление: ${formatBidText(player.last_bid)}</div>`;
+                } else if (!player.is_eliminated && gameState.status === 'PLAYING' && !isCurrent) {
+                    bidHtml = `<span class="hint-text">Ждёт хода</span>`;
                 }
 
-                playerLine += `</div>`;
-                playersListDiv.innerHTML += playerLine;
+                const cardsHtml = renderPlayerCards(player, revealAll);
+                playersListDiv.innerHTML += `
+                    <div class="${rowClass.join(' ')}">
+                        <div class="player-meta">
+                            <div class="player-info">
+                                <div class="status-dot"></div>
+                                ${nameHtml}
+                            </div>
+                            ${bidHtml}
+                        </div>
+                        <div class="card-count-label">Карт: ${player.cards.length} / ${limit}</div>
+                        ${cardsHtml}
+                    </div>`;
             });
 
-            // 3. Обновляем историю ставок
-            const bidsUl = document.getElementById('bids-history');
-            bidsUl.innerHTML = '';
+            const showBids = gameState.status === 'PLAYING' || gameState.status === 'SHOWDOWN';
+            const currentBidRow = document.getElementById('current-bid-row');
+            const currentBidText = document.getElementById('current-bid-text');
+            const raisesPanel = document.getElementById('raises-panel');
+            const raisesBox = document.getElementById('raises-box');
 
-            if (gameState.bid_history.length === 0) {
-                bidsUl.innerHTML = '<li>Ставок пока нет</li>';
+            currentBidRow.style.display = showBids ? 'block' : 'none';
+            raisesPanel.style.display = showBids ? 'block' : 'none';
+
+            if (!gameState.bid_history || gameState.bid_history.length === 0) {
+                currentBidText.innerHTML = '<span class="hint-text">нет</span>';
+                raisesBox.innerHTML = '<div class="hint-text">Повышений пока нет</div>';
             } else {
-                const comboNames = {1:'Старшая карта', 2:'Пара', 3:'Две пары', 4:'Сет', 5:'Стрит', 6:'Фулл Хаус', 7:'Флеш', 8:'Каре', 9:'Стрит-Флеш', 10:'Флеш-Рояль'};
-                const ranks = {11:'Валет', 12:'Дама', 13:'Король', 14:'Туз'};
-                const suits = {'C':'♣', 'D':'♦', 'H':'♥', 'S':'♠'};
+                const lastBid = gameState.bid_history[gameState.bid_history.length - 1];
+                const lastName = playerNameById(gameState.players, lastBid.player_id);
+                currentBidText.innerHTML =
+                    `<b>${formatBidText(lastBid)}</b> <span class="hint-text">(${lastName})</span>`;
 
+                raisesBox.innerHTML = '';
                 gameState.bid_history.forEach(bid => {
-                    const pRank = ranks[bid.rank_primary] || bid.rank_primary || '';
-                    const sRank = ranks[bid.rank_secondary] || bid.rank_secondary || '';
-                    const suitDisplay = bid.suit ? suits[bid.suit] : '';
-
-                    let bidText = `${comboNames[bid.type]} (${pRank}`;
-                    if (sRank) bidText += ` и ${sRank}`;
-                    if (suitDisplay) bidText += ` ${suitDisplay}`;
-                    bidText += `)`;
-
-                    bidsUl.innerHTML += `<li>Игрок <b>${bid.player_id}</b> заявил: ${bidText}</li>`;
+                    const name = playerNameById(gameState.players, bid.player_id);
+                    raisesBox.innerHTML +=
+                        `<div class="raise-line"><span style="color:var(--accent-gold);">${name}</span> повысил до <b>${formatBidText(bid)}</b></div>`;
                 });
             }
         };
 
-        // Функция отправки хода на сервер
-        // Исправленный вариант:
         async function sendAction(actionType) {
-            const payload = {
-                player_id: playerId,
-                action: actionType
-            };
-
+            const payload = { player_id: playerId, room_code: roomCode, action: actionType };
             if (actionType === 'RAISE') {
                 payload.type = parseInt(document.getElementById('bid-type').value);
-
                 const pRank = document.getElementById('bid-primary-rank').value;
                 const sRank = document.getElementById('bid-secondary-rank').value;
                 const suit = document.getElementById('bid-suit').value;
-
                 if (document.getElementById('primary-rank-group').style.display !== 'none') {
                     payload.rank_primary = parseInt(pRank);
                 }
                 if (document.getElementById('secondary-rank-group').style.display !== 'none') {
                     payload.rank_secondary = parseInt(sRank);
                 }
-                if (document.getElementById('suit-group').style.display !== 'none' && suit !== "") {
+                if (document.getElementById('suit-group').style.display !== 'none' && suit !== '') {
                     payload.suit = suit;
                 }
             }
-
             try {
                 const response = await fetch('/api/game/action', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify(payload),
                 });
-
                 if (!response.ok) {
                     const errData = await response.json();
-                    alert("Ошибка валидации хода: " + (errData.detail || JSON.stringify(errData)));
+                    alert('Ошибка: ' + (errData.detail || JSON.stringify(errData)));
                 }
-            } catch (err) {
-                alert("Ошибка соединения с сервером");
-            }
+            } catch { alert('Ошибка соединения с сервером'); }
         }
 
-        eventSource.onerror = function() {
-            console.error("SSE соединение разорвано.");
-        };
+        eventSource.onerror = function() { console.error('SSE соединение разорвано.'); };
+        toggleFormFields();
     </script>
 </body>
 </html>

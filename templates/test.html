@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Блеф — Покерный Клуб</title>
+    <style>
+        :root {
+            --bg-gradient: radial-gradient(circle at 50% 50%, #1a3c26 0%, #0b1a10 100%);
+            --panel-bg: rgba(20, 30, 23, 0.85);
+            --border-glow: #2ecc71;
+            --text-main: #ecf0f1;
+            --text-muted: #95a5a6;
+            --accent-gold: #f1c40f;
+            --card-red: #e74c3c;
+            --card-black: #2c3e50;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            box-sizing: border-box;
+        }
+
+        .table-container {
+            width: 100%;
+            max-width: 900px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Шапка с неоновым эффектом сукна */
+        header {
+            background: var(--panel-bg);
+            border: 1px solid rgba(46, 204, 113, 0.3);
+            box-shadow: 0 0 15px rgba(46, 204, 113, 0.15);
+            padding: 20px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .room-title h1 {
+            margin: 0;
+            font-size: 24px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            background: linear-gradient(to right, #fff, var(--accent-gold));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status-badge {
+            background: rgba(46, 204, 113, 0.2);
+            border: 1px solid var(--border-glow);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            text-transform: uppercase;
+            font-weight: bold;
+            color: #55ff77;
+        }
+
+        /* Игровые блоки */
+        .poker-panel {
+            background: var(--panel-bg);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(4px);
+        }
+
+        .panel-title {
+            font-size: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--accent-gold);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* --- Стилизация игральных карт (CSS дизайн взамен текста) --- */
+        .cards-flex {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .poker-card {
+            width: 80px;
+            height: 120px;
+            background: #ffffff;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 8px;
+            box-sizing: border-box;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.35), inset 0 0 8px rgba(0,0,0,0.1);
+            position: relative;
+            transition: transform 0.2s ease;
+        }
+
+        .poker-card:hover {
+            transform: translateY(-5px);
+        }
+
+        /* Окраска мастей */
+        .poker-card.suit-H, .poker-card.suit-D { color: var(--card-red); }
+        .poker-card.suit-S, .poker-card.suit-C { color: var(--card-black); }
+
+        .card-corner {
+            font-size: 16px;
+            font-weight: 800;
+            line-height: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .card-corner span {
+            font-size: 12px;
+            margin-top: 2px;
+        }
+
+        .card-center-icon {
+            font-size: 32px;
+            text-align: center;
+            align-self: center;
+            line-height: 1;
+            margin-top: -4px;
+        }
+
+        .card-corner.bottom {
+            transform: rotate(180deg);
+        }
+
+        /* Задняя рубашка карты */
+        .poker-card.shirt {
+            background: #2c3e50;
+            background-image:
+                radial-gradient(var(--accent-gold) 15%, transparent 16%),
+                radial-gradient(var(--accent-gold) 15%, transparent 16%),
+                linear-gradient(45deg, rgba(0,0,0,0.1) 25%, transparent 25%, transparent 75%, rgba(0,0,0,0.1) 75%, rgba(0,0,0,0.1)),
+                linear-gradient(45deg, rgba(0,0,0,0.1) 25%, #1a252f 25%, #1a252f 75%, rgba(0,0,0,0.1) 75%, rgba(0,0,0,0.1));
+            background-size: 8px 8px, 8px 8px, 8px 8px, 8px 8px;
+            background-position: 0 0, 4px 4px, 0 0, 4px 4px;
+            border: 3px solid #fff;
+        }
+
+        .poker-card.shirt::after {
+            content: "♠";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: rgba(241, 196, 15, 0.15);
+            font-size: 40px;
+        }
+
+        /* Строки игроков */
+        .player-card-row {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .player-card-row.my-turn {
+            border-color: var(--border-glow);
+            background: rgba(46, 204, 113, 0.04);
+            box-shadow: inset 0 0 10px rgba(46, 204, 113, 0.05);
+        }
+
+        .player-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .player-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 5px;
+            background: #7f8c8d;
+        }
+        .my-turn .status-dot {
+            background: var(--border-glow);
+            box-shadow: 0 0 8px var(--border-glow);
+        }
+
+        .player-bid-bubble {
+            font-size: 13px;
+            background: rgba(241, 196, 15, 0.12);
+            border: 1px solid rgba(241, 196, 15, 0.3);
+            color: var(--accent-gold);
+            padding: 4px 10px;
+            border-radius: 6px;
+        }
+
+        /* Интерактивная панель ставок */
+        .bet-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .input-group label {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+        }
+
+        select, button {
+            background: #111813;
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+            box-sizing: border-box;
+            transition: all 0.2s ease;
+        }
+
+        select:focus {
+            border-color: var(--border-glow);
+        }
+
+        button {
+            cursor: pointer;
+            font-weight: bold;
+            border: 1px solid var(--border-glow);
+            color: var(--border-glow);
+            background: rgba(46, 204, 113, 0.1);
+        }
+
+        button:hover {
+            background: var(--border-glow);
+            color: #1a3c26;
+            box-shadow: 0 0 10px rgba(46, 204, 113, 0.4);
+        }
+
+        button.btn-bluff {
+            border-color: var(--card-red);
+            color: var(--card-red);
+            background: rgba(231, 76, 60, 0.1);
+        }
+
+        button.btn-bluff:hover {
+            background: var(--card-red);
+            color: #fff;
+            box-shadow: 0 0 10px rgba(231, 76, 60, 0.4);
+        }
+
+        /* Консоль логов */
+        .terminal-logs {
+            background: #090f0b;
+            border: 1px solid #1c2d21;
+            border-radius: 6px;
+            height: 100px;
+            overflow-y: auto;
+            padding: 10px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 12px;
+            color: #a2fcd4;
+            line-height: 1.5;
+        }
+
+        /* История заявлений */
+        .bids-timeline {
+            margin: 0;
+            padding-left: 15px;
+            font-size: 13px;
+            color: var(--text-main);
+        }
+        .bids-timeline li {
+            margin-bottom: 6px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="table-container">
+        <!-- ВЕРХНЯЯ ИНФО-ПАНЕЛЬ -->
+        <header>
+            <div class="room-title">
+                <h1>♠ Клуб Блеф ♣</h1>
+                <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Вы за столом как: <span style="color: #fff; font-weight:bold;">{{ player_id }}</span></div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <div class="status-badge" id="game-status">Идет раунд</div>
+                <button onclick="resetGame()" style="padding: 5px 10px; font-size: 11px; border-radius: 4px; width: auto;">Сбросить стол</button>
+            </div>
+        </header>
+
+        <!-- ПАНЕЛЬ УПРАВЛЕНИЯ СТАВКАМИ (ИНТЕРФЕЙС ТЕКУЩЕГО ИГРОКА) -->
+        <div id="turn-panel" class="poker-panel" style="border-left: 4px solid var(--border-glow);">
+            <div class="panel-title">⚡ Ваше действие (Ваш ход)</div>
+
+            <div class="bet-grid">
+                <div class="input-group">
+                    <label>Выбор комбинации</label>
+                    <select id="bid-type" onchange="toggleFormFields()">
+                        <option value="1">Старшая карта</option>
+                        <option value="2" selected>Пара</option>
+                        <option value="3">Две пары</option>
+                        <option value="4">Сет (Тройка)</option>
+                        <option value="5">Стрит</option>
+                        <option value="6">Фулл Хаус</option>
+                        <option value="7">Флеш</option>
+                        <option value="8">Каре</option>
+                        <option value="9">Стрит-Флеш</option>
+                        <option value="10">Флеш-Рояль</option>
+                    </select>
+                </div>
+
+                <div class="input-group" id="primary-rank-group">
+                    <label id="primary-label">Номинал / Граница</label>
+                    <select id="bid-primary-rank">
+                        <option value="14">Туз (Т)</option>
+                        <option value="13">Король (К)</option>
+                        <option value="12">Дама (Д)</option>
+                        <option value="11">Валет (В)</option>
+                        <option value="10">10</option>
+                    </select>
+                </div>
+
+                <div class="input-group" id="secondary-rank-group" style="display: none;">
+                    <label>Второй номинал</label>
+                    <select id="bid-secondary-rank">
+                        <option value="13">Король (К)</option>
+                        <option value="12">Дама (Д)</option>
+                    </select>
+                </div>
+
+                <div class="input-group" id="suit-group" style="display: none;">
+                    <label>Масть</label>
+                    <select id="bid-suit">
+                        <option value="">Любая масть</option>
+                        <option value="C">♣ Трефы</option>
+                        <option value="D">♦ Бубны</option>
+                        <option value="H">♥ Червы</option>
+                        <option value="S">♠ Пики</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 15px;">
+                <button onclick="sendAction('RAISE')">Повысить / Объявить ставку</button>
+                <button id="btn-challenge" class="btn-bluff" onclick="sendAction('CHALLENGE')">НЕ ВЕРЮ!</button>
+            </div>
+        </div>
+
+        <!-- КАРТЫ ИГРОКОВ ЗА СТОЛОМ -->
+        <div class="poker-panel">
+            <div class="panel-title">👥 Карты на столе</div>
+
+            <div id="players-list">
+                <!-- ДЕМО КАРТОЧКА: ТЕКУЩИЙ ИГРОК (ВЫ) -->
+                <div class="player-card-row my-turn">
+                    <div class="player-meta">
+                        <div class="player-info">
+                            <div class="status-dot"></div>
+                            <strong>Алексей <span style="color: var(--border-glow);">(Вы)</span></strong>
+                        </div>
+                        <div class="player-bid-bubble">Заявление: Пара Валетов</div>
+                    </div>
+                    <!-- Блок с реальными картами -->
+                    <div class="cards-flex">
+                        <!-- Червовый Валет -->
+                        <div class="poker-card suit-H">
+                            <div class="card-corner">В<span>♥</span></div>
+                            <div class="card-center-icon">♥</div>
+                            <div class="card-corner bottom">В<span>♥</span></div>
+                        </div>
+                        <!-- Трефовая Дама -->
+                        <div class="poker-card suit-C">
+                            <div class="card-corner">Д<span>♣</span></div>
+                            <div class="card-center-icon">♣</div>
+                            <div class="card-corner bottom">Д<span>♣</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ДЕМО КАРТОЧКА: ОППОНЕНТ -->
+                <div class="player-card-row">
+                    <div class="player-meta">
+                        <div class="player-info">
+                            <div class="status-dot"></div>
+                            <strong>Мария</strong>
+                        </div>
+                        <div style="color: var(--text-muted); font-size: 13px;">Ждет своего хода</div>
+                    </div>
+                    <!-- Блок с скрытыми картами (рубашки) -->
+                    <div class="cards-flex">
+                        <div class="poker-card shirt"></div>
+                        <div class="poker-card shirt"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ЛОГ ДЕЙСТВИЙ -->
+        <div class="poker-panel">
+            <div class="panel-title">💬 Протокол игры</div>
+            <div id="logs-box" class="terminal-logs">
+                <div>&gt; Игра инициализирована. Игрокам роздано по 2 карты.</div>
+                <div>&gt; Алексей объявил комбинацию: Пара Валетов. Ход переходит к Марии.</div>
+            </div>
+        </div>
+
+        <!-- ТЕКУЩИЙ ТРЕК СТАВОК -->
+        <div class="poker-panel">
+            <div class="panel-title">📈 Хроника ставок раунда</div>
+            <ul id="bids-history" class="bids-timeline">
+                <li>Игрок <span style="color: var(--accent-gold);">p1</span> заявил: <b>Пара</b> (Валет)</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // JS скрипт остается пустым/чистым для вашей последующей интеграции логики.
+        // Функции-заглушки для предотвращения ошибок отображения полей ввода:
+        function toggleFormFields() {
+            const type = parseInt(document.getElementById('bid-type').value);
+            document.getElementById('secondary-rank-group').style.display = (type === 3 || type === 6) ? "block" : "none";
+            document.getElementById('suit-group').style.display = (type === 9 || type === 10) ? "block" : "none";
+            document.getElementById('primary-rank-group').style.display = (type === 10) ? "none" : "block";
+        }
+        function sendAction(type) { console.log("Действие:", type); }
+        function resetGame() { console.log("Рестарт стола"); }
+    </script>
+</body>
+</html>
